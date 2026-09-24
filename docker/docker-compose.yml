@@ -1,3 +1,21 @@
 services:
-  hello:
-    image: hello-world
+  librechat:
+    image: ghcr.io/danny-avila/librechat:latest
+    ports:
+      - "3080:3080"
+    env_file:
+      - ../.env
+    environment:
+      - MONGO_URI=mongodb://mongodb:27017/LibreChat
+    volumes:
+      - ../librechat.yaml:/app/librechat.yaml
+    depends_on:
+      - mongodb
+
+  mongodb:
+    image: mongo:7
+    volumes:
+      - chat_data:/data/db
+
+volumes:
+  chat_data:
