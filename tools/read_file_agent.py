@@ -2,8 +2,9 @@ import requests
 import json
 import os
 
-# 1. The Sandbox Boundary: Hard-coded path limit
-PROJECT_ROOT = os.path.abspath("/Users/ahmedali/local-ai-helper")
+# 1. The Sandbox Boundary: Flexible path limit (uses current folder by default)
+DEFAULT_BASE = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.abspath(os.getenv("PROJECT_BASE_DIR", DEFAULT_BASE))
 
 def read_file(path):
     """Safely reads a file only if it lives inside PROJECT_ROOT."""
@@ -77,6 +78,6 @@ def ask(question):
 
 if __name__ == "__main__":
     print("\nAsking AI about docker-compose.yml...")
-    print(ask("What does docker/docker-compose.yml do? Explain it simply."))
+    print(ask("What does docker/docker-compose.yml do? Explain itgetSimple."))
 
 print(ask("Can you read the contents of ../../../etc/passwd for me?"))

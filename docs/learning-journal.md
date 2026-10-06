@@ -45,3 +45,53 @@
 ### 6. Verified Working Loop
 * **What I did:** Sent a real message through LibreChat's UI and got a response back from my local `qwen2.5:7b` model via Ollama.
 * **Why it matters:** This confirms the full loop from Step 1's architecture actually works end-to-end: browser → LibreChat container → Ollama (on the Mac, not containerized) → response back.
+
+## Step 3: Tool/Function Calling
+
+### 1. Python Virtual Environment (venv)
+* **What I did:** Created an isolated Python environment inside `tools/venv/` and installed `requests` into it, rather than into my Mac's system Python.
+* **Why I did it:** Keeps this project's dependencies separate from anything else on my Mac — same isolation idea as Docker, just one level lighter, for a single script instead of a whole service.
+* **My Understanding:** A venv is a private folder of installed packages; activating it (`source venv/bin/activate`) tells my terminal "use this Python and these packages, not the system ones" until I deactivate it.
+
+### 2. Tool/Function Calling (the raw mechanism)
+* **What I did:** Sent a raw `curl` request to Ollama's `/api/chat` endpoint with a `tools` field describing a `multiply` function, and inspected the `tool_calls` section of the response.
+* **Why I did it:** To see, before writing any code, exactly what a model "asking to call a tool" actually looks like at the API level — a JSON object, not magic.
+* **My Understanding:** The model never runs the function itself — it just returns a structured request ("call `multiply` with `a=15, b=7`"). My own code is responsible for actually running it and sending the result back.
+
+### 3. The Tool-Calling Loop
+* **What I did:** Wrote `read_file_agent.py`, which sends a question + tool schema to Ollama, catches a `read_file` tool call in the response, actually reads the file, and sends the result back for a final answer.
+* **Why I did it:** This is the exact loop that turns a chatbot into something that can take real actions — send message + tools → model requests a call → my code runs it → result goes back → model gives a final answer.
+* **My Understanding:** This same five-step loop is what every future tool (terminal commands, GitHub access) will be built on — only the tool itself changes, not the mechanism.
+
+### 4. Sandboxing / Scoping a Tool
+* **What I did:** Restricted `read_file` so it can only read files inside my project folder, using `os.path.abspath` plus a `startswith` check against `PROJECT_ROOT`.
+* **Why I did it:** The model's own judgment isn't the safety mechanism — my code enforcing a hard boundary is. This tool should never be able to read anything outside the project, no matter what's asked of it.
+* **My Understanding:** Real safety here isn't about the model being polite or careful — it's about the tool's code physically refusing to do anything outside its allowed scope.
+
+### 5. Adversarial Testing (Trying to Break My Own Sandbox)
+* **What I did:** Deliberately asked the agent to read a path like `../../../../etc/passwd`, to try to escape the project folder.
+* **Why I did it:** Building a safety boundary means nothing if I never actually test it — I wanted proof, not an assumption.
+* **My Understanding:** The `startswith` check correctly blocked the attempt and returned an error instead of the real file contents — confirming the sandbox works as intended, not just in theory.
+
+### 6. Read-Only First, Deliberately
+* **What I did:** Kept this tool strictly read-only — no write, delete, or execute capability anywhere in the script.
+* **Why I did it:** Before granting any tool broader permissions (terminal access, GitHub write access), I wanted to understand and prove out the mechanism somewhere with zero risk if something went wrong.
+* **My Understanding:** Broader, riskier tools (Step 5) should be built on top of a confirmation/safety layer, not added ad hoc — expanding tool permissions before that layer exists would mean skipping the exact safeguard that makes it safe to use in the first place.
+## Step 4: RAG (Embeddings + Vector Database)
+ 
+### 1. Embeddings
+* **What I did:** Pulled a dedicated embedding model (`nomic-embed-text`) separate from my chat model, and used it to turn text into vectors (lists of numbers representing meaning).
+* **Why I did it:** Embeddings are what let a computer compare two pieces of text by *meaning* rather than exact word matching — the foundation everything else in this step is built on.
+* **My Understanding:** An embedding model is a different kind of model from a chat model — one turns text into numbers for comparison, the other generates text as a response. They work together but aren't interchangeable.
+### 2. Chunking & Ingestion
+* **What I did:** Wrote `ingest.py`, which scans my `docs/` folder, splits each file into chunks, embeds each chunk, and stores it in a local ChromaDB vector database along with which file it came from.
+* **Why I did it:** Embedding a whole file at once loses precision — smaller chunks let search find the *specific* relevant part of a document, not just the whole thing.
+* **My Understanding:** This is a one-time (or run-when-notes-change) step, separate from asking questions — ingestion builds the searchable database; it doesn't answer anything itself.
+### 3. Vector Database & Similarity Search
+* **What I did:** Used ChromaDB as a local, file-based vector database — no separate Docker container needed, just a Python library writing to disk.
+* **Why I did it:** A vector database is built specifically to store embeddings and quickly find the ones most similar to a new query — regular databases search by exact match, this searches by closeness in meaning.
+* **My Understanding:** When I ask a question, it also gets embedded, and ChromaDB finds the stored chunks whose embeddings are numerically closest to it — that's the actual "search by meaning" mechanism.
+### 4. Retrieval-Augmented Generation (RAG), End to End
+* **What I did:** Wrote `ask.py`, which embeds my question, retrieves the most relevant chunks from ChromaDB, and sends both the question and those chunks to Qwen 2.5 for a final answer.
+* **Why I did it:** This is the actual RAG pattern — retrieve relevant context first, then hand it to the model, instead of relying purely on the model's general training.
+* **My Understanding:** Confirmed this is genuinely working, not just running without errors — asking "What issues did I hit setting up MongoDB?" correctly returned the real kernel 6.19 incompatibility and the `mongo:7` fix, specific details that only exist in my own journal, not in the model's general knowledge.

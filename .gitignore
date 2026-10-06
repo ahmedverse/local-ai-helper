@@ -6,3 +6,5 @@
 # Environment and secret files
 .env
 tools/venv/
+
+echo "tools/logs/" >> /Users/ahmedali/local-ai-helper/.gitignore
