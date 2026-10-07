@@ -1,6 +1,6 @@
 services:
   librechat:
-    image: ghcr.io/danny-avila/librechat:latest
+    build: .   # Tells Docker to build from a Dockerfile in this directory
     ports:
       - "3080:3080"
     env_file:
@@ -9,6 +9,8 @@ services:
       - MONGO_URI=mongodb://mongodb:27017/LibreChat
     volumes:
       - ../librechat.yaml:/app/librechat.yaml
+      - ../tools:/app/tools
+      - ../:/workspace   # Mounts your repository root to /workspace inside the container
     depends_on:
       - mongodb
 

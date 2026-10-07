@@ -95,3 +95,32 @@
 * **What I did:** Wrote `ask.py`, which embeds my question, retrieves the most relevant chunks from ChromaDB, and sends both the question and those chunks to Qwen 2.5 for a final answer.
 * **Why I did it:** This is the actual RAG pattern — retrieve relevant context first, then hand it to the model, instead of relying purely on the model's general training.
 * **My Understanding:** Confirmed this is genuinely working, not just running without errors — asking "What issues did I hit setting up MongoDB?" correctly returned the real kernel 6.19 incompatibility and the `mongo:7` fix, specific details that only exist in my own journal, not in the model's general knowledge.
+# Step 5: Agents (Terminal + GitHub, Safely)
+ 
+### 1. Command Allowlisting
+* **What I did:** Built `ALLOWED_COMMANDS.py` with a fixed list of safe command prefixes (`git status`, `git log`, `ls`, `pytest`, etc.), and an `is_allowed()` check that runs before anything else.
+* **Why I did it:** The agent should never be able to run "whatever it decides" — only a small, deliberately reviewed set of commands should ever be possible, with everything else refused automatically.
+* **My Understanding:** Verified directly that `is_allowed("rm -rf /")` returns `False` — confirming destructive commands are rejected by the allowlist itself, before any confirmation step is even reached.
+### 2. Human-in-the-Loop Confirmation
+* **What I did:** Added a real confirmation prompt (`input("Allow this? [y/N]: ")`) inside `run_command`, so nothing executes without me explicitly typing `y`.
+* **Why I did it:** Even for allowlisted commands, I wanted a genuine pause-and-ask step before anything actually runs — not just trusting the model's judgment.
+* **My Understanding:** Tested both paths directly — an off-list command (`rm -rf /`) was refused instantly with no prompt at all, while an allowlisted command (`git status`) genuinely paused and waited for my input before running.
+### 3. Two-Layer Defense
+* **What I did:** Confirmed the allowlist check happens *before* the confirmation prompt, not after.
+* **Why it matters:** Even if I'd accidentally typed `y` to something dangerous, it would never have reached that point — the allowlist is checked first and blocks it completely, independent of my own judgment in the moment.
+* **My Understanding:** This is a deliberate two-layer design: the allowlist is a hard, code-enforced wall (like Step 3's sandboxing), and confirmation is a second, independent layer on top — not a replacement for it.
+### 4. GitHub Personal Access Token (Least Privilege)
+* **What I did:** Created a fine-grained GitHub PAT scoped to exactly one repository, with "Contents: Read-only" permission and nothing else.
+* **Why I did it:** A token scoped this narrowly means that even if it leaked, it could only read file contents from one specific repo — nothing else on my GitHub account would be reachable with it.
+* **My Understanding:** Verified this directly — hitting a broader GitHub API endpoint (`/user`) with this token correctly failed, confirming the token genuinely can't do anything beyond its narrow scope, not just that I assumed it couldn't.
+### 5. Authenticated API Calls
+* **What I did:** Built `github_get_file`, which sends `Authorization: Bearer {GITHUB_TOKEN}` as a header to GitHub's REST API, and decodes the base64-encoded file content it returns.
+* **Why I did it:** This header is what proves to GitHub's API that a request is genuinely authenticated as me, with exactly the permissions I granted the token.
+* **My Understanding:** Confirmed this worked end-to-end by fetching a real file (`docker/docker-compose.yml`) directly from GitHub, not from my local disk — proving the API call itself was live and correctly authenticated.
+### 6. Audit Logging
+* **What I did:** Logged every single action — refused, declined, and executed — to `logs/agent.log`, with a timestamp, regardless of outcome.
+* **Why I did it:** If anything unexpected ever happens, I need a complete, real record of exactly what the agent attempted and when — not just the successful runs.
+* **My Understanding:** Checked the log file directly and confirmed it contains a full trail of every test I ran, which is the actual accountability mechanism behind this whole step, not just a nice-to-have.
+### 7. The Full Agent Loop
+* **What I did:** Combined `read_file` (Step 3), `run_command`, and `github_get_file` into one tool-calling loop, so a single question can trigger whichever tool is actually needed.
+* **Why it matters:** This is genuinely the core of what I originally wanted — an assistant that can look at my code, run things (with my permission), and pull from GitHub — built safely, piece by piece, instead of granting broad access all at once.
